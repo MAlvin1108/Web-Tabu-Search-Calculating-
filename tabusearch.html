@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabu Search</title>
+    <style>
+        table, th, td {
+            border: 1px solid black;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 5px;
+            text-align: center;
+        }
+        .border {
+            background-color: rgb(250, 248, 244);
+            padding: 20px;
+            background-position: fixed;
+            background-size: 900px;
+            border-width: 700px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body style="background-image: url('math.jpg')">
+    <div class="border">
+        <h1>Tabu Search</h1>
+        <h3>Kelompok 11</h3>
+        <div>
+            <label for="totvar">Total Variables:</label>
+            <input type="number" id="totvar" step="1" placeholder="input here...">
+            <label for="totconst">Total Constraints:</label>
+            <input type="number" id="totconst" step="1" placeholder="input here...">
+            <button type="button" onclick="generateTables()">Generate</button>
+        </div>
+        <div id="tables-container">
+        </div>
+        <button onclick="main()">Run Tabu Search</button>
+        <div id="result-container">
+        </div>
+    </div>
+
+    <script>
+        const MAX_row = 50;
+        const MAX_col = 50;
+
+        function generateTables() {
+            const totalVariables = parseInt(document.getElementById("totvar").value, 10);
+            const totalConstraints = parseInt(document.getElementById("totconst").value, 10);
+
+            let tablesHtml = '<h4>Fungsi Tujuan</h4>';
+            tablesHtml += `<div>Max Z = `;
+            for (let i = 0; i < totalVariables; i++) {
+                tablesHtml += `<input type="number" step="1" id="obj${i}" placeholder="0"> x${i + 1} `;
+                if (i < totalVariables - 1) {
+                    tablesHtml += '+ ';
+                }
+            }
+            tablesHtml += `</div>`;
+
+            tablesHtml += '<h4>Fungsi Kendala</h4>';
+            for (let i = 0; i < totalConstraints; i++) {
+                tablesHtml += '<div>';
+                for (let j = 0; j < totalVariables; j++) {
+                    tablesHtml += `<input type="number" step="1" id="con${i}-${j}" placeholder="0"> x${j + 1} `;
+                    if (j < totalVariables - 1) {
+                        tablesHtml += '+ ';
+                    }
+                }
+                tablesHtml += `
+                    <select id="op${i}">
+                        <option value="<=">&lt;=</option>
+                        <option value=">=">&gt;=</option>
+                        <option value="<">&lt;</option>
+                        <option value=">">&gt;</option>
+                        <option value="=">=</option>
+                        <option value="!=">!=</option>
+                    </select>
+                    <input type="number" step="1" id="bound${i}" placeholder="0">
+                </div>`;
+            }
+
+            document.getElementById("tables-container").innerHTML = tablesHtml;
+        }
+
+        class Solution {
+            constructor(data, feasible) {
+                this.data = data || new Array(MAX_row).fill(0);
+                this.feasible = feasible || true;
+            }
+        }
+
+        function getFormData() {
+            const totalVariables = parseInt(document.getElementById("totvar").value, 10);
+            const totalConstraints = parseInt(document.getElementById("totconst").value, 10);
+
+            let cost = [];
+            let constraints = [];
+            let operators = [];
+            let boundaries = [];
+
+            for (let i = 0; i < totalVariables; i++) {
+                cost.push(parseFloat(document.getElementById(`obj${i}`).value) || 0);
+            }
+
+            for (let i = 0; i < totalConstraints; i++) {
+                let constraintRow = [];
+                for (let j = 0; j < totalVariables; j++) {
+                    constraintRow.push(parseFloat(document.getElementById(`con${i}-${j}`).value) || 0);
+                }
+                constraints.push(constraintRow);
+                operators.push(document.getElementById(`op${i}`).value);
+                boundaries.push(parseFloat(document.getElementById(`bound${i}`).value) || 0);
+            }
+
+            return { cost, constraints, operators, boundaries };
+        }
+
+        function isFeasible(solution, constraints, operators, boundaries, varCount, constraintCount) {
+            let result = new Array(constraintCount).fill(0);
+            let feasible = true;
+
+            for (let i = 0; i < constraintCount; i++) {
+                result[i] = 0;
+                for (let j = 0; j < varCount; j++) {
+                    result[i] += solution[j] * constraints[i][j];
+                }
+
+                if (operators[i] === ">=" && result[i] < boundaries[i]) {
+                    feasible = false;
+                    break;
+                } else if (operators[i] === "<=" && result[i] > boundaries[i]) {
+                    feasible = false;
+                    break;
+                } else if (operators[i] === "<" && result[i] >= boundaries[i]) {
+                    feasible = false;
+                    break;
+                } else if (operators[i] === ">" && result[i] <= boundaries[i]) {
+                    feasible = false;
+                    break;
+                } else if (operators[i] === "=" && result[i] !== boundaries[i]) {
+                    feasible = false;
+                    break;
+                } else if (operators[i] === "!=" && result[i] === boundaries[i]) {
+                    feasible = false;
+                    break;
+                }
+            }
+
+            return feasible;
+        }
+
+        function outSolution(solution, varCount) {
+            let result = "{";
+            for (let i = 0; i < varCount; i++) {
+                result += solution[i];
+                if (i < varCount - 1) {
+                    result += ", ";
+                }
+            }
+            result += "}";
+            console.log(result);
+        }
+
+        function initialSolution(solution, varCount, ind) {
+            for (let i = 0; i < varCount; i++) {
+                solution.data[i] = (i === ind) ? 1 : 0;
+            }
+        }
+
+        function value(cost, solution, varCount) {
+            let result = 0;
+            for (let i = 0; i < varCount; i++) {
+                result += cost[i] * solution.data[i];
+            }
+            return result;
+        }
+
+        function newSol(newSolution, solution, varCount) {
+            for (let i = 0; i < varCount; i++) {
+                newSolution.data[i] = solution.data[i];
+            }
+        }
+
+        function maksZ(values, index) {
+            let value = Number.NEGATIVE_INFINITY;
+            for (let i = 0; i < index; i++) {
+                value = Math.max(value, values[i]);
+            }
+            return value;
+        }
+
+        function isEqual(solution1, solution2, varCount) {
+            for (let i = 0; i < varCount; i++) {
+                if (solution1.data[i] !== solution2.data[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function deleteSol(solution, varCount) {
+            for (let i = 0; i < varCount; i++) {
+                solution.data[i] = null;
+            }
+        }
+
+        function valuetab(cost, tabu, varCount) {
+            let result = 0;
+            for (let i = 0; i < varCount; i++) {
+                result += cost[i] * tabu[i];
+            }
+            return result;
+        }
+
+        function main() {
+            const { cost, constraints, operators, boundaries } = getFormData();
+            const jumVar = cost.length;
+            const jumBts = constraints.length;
+
+            let solusi = new Solution();
+            let valuetabu = new Array(MAX_row).fill(0);
+
+            console.log("\nFungsi tujuannya : \nMax Z = ");
+            let funcStr = "Max Z = ";
+            for (let i = 0; i < jumVar; i++) {
+                funcStr += `${cost[i]}x[${i + 1}] `;
+                if (i < jumVar - 1) {
+                    funcStr += "+ ";
+                }
+            }
+            console.log(funcStr);
+
+            console.log("\nBatasan : \n");
+            for (let i = 0; i < jumBts; i++) {
+                let constraintStr = `${i + 1}. `;
+                for (let j = 0; j < jumVar; j++) {
+                    constraintStr += `${constraints[i][j]}x[${j + 1}] `;
+                    if (j < jumVar - 1) {
+                        constraintStr += "+ ";
+                    }
+                }
+                constraintStr += `${operators[i]} ${boundaries[i]}`;
+                console.log(constraintStr);
+            }
+
+            console.log("\nSolusi : ");
+            let k = 0;
+            for (let i = 0; i < jumVar; i++) {
+                let j = 0;
+                while (j < jumVar) {
+                    initialSolution(solusi, jumVar, j);
+                    if (isFeasible(solusi.data, constraints, operators, boundaries, jumVar, jumBts)) {
+                        outSolution(solusi.data, jumVar);
+                        valuetabu[k] = value(cost, solusi, jumVar);
+                        k++;
+                    }
+                    deleteSol(solusi, jumVar);
+                    j++;
+                }
+            }
+
+            const maxZValue = maksZ(valuetabu, k);
+            console.log(`\nNilai Max Z = ${maxZValue}`);
+
+            document.getElementById("result-container").innerHTML = `<p>Nilai Max Z = ${maxZValue}</p>`;
+        }
+    </script>
+</body>
+</html>
